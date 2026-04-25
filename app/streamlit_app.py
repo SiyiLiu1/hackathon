@@ -1,8 +1,16 @@
-"""Caseworker-facing Streamlit shell for governance-aware referrals."""
+"""CareMatch Safe Streamlit landing page for Track 1.
+
+Run with:
+    streamlit run app/streamlit_app.py
+
+This app follows the same shell pattern as ``shared/app/streamlit_app.py``
+but is specialized for Track 1 Inter-Org Referral & Care Coordination.
+"""
 
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -16,6 +24,8 @@ if str(_ROOT) not in sys.path:
 from src.loaders import build_referrals_enriched, load_track1_data  # noqa: E402
 
 DEFAULT_TRACK1_RAW_DIR = str(_ROOT / "tracks" / "referral-care-coordination" / "data" / "raw")
+TRACK1_LABEL = "Track 1 — Referral & Care Coordination"
+DEFAULT_TRACK1_RAW_DIR = os.environ.get("TRACK1_DATA_DIR", DEFAULT_TRACK1_RAW_DIR)
 
 
 @st.cache_data(show_spinner=False)
@@ -56,6 +66,17 @@ def _format_metric_value(value: int | float | str) -> str:
     if isinstance(value, (int, float)):
         return f"{int(value):,}" if float(value).is_integer() else f"{value:,.2f}"
     return str(value)
+
+
+def _kpi(
+    label: str,
+    value: int | float | str,
+    help_text: str | None = None,
+    help: str | None = None,
+) -> None:
+    """Render KPI metric with the same tooltip behavior as shared app."""
+    tooltip = help_text if help_text is not None else help
+    st.metric(label=label, value=_format_metric_value(value), help=tooltip)
 
 
 def _numeric_metric_value(metrics: dict[str, dict[str, Any]], metric_name: str) -> int | None:
@@ -318,8 +339,11 @@ def main() -> None:
         layout="wide",
     )
 
-    st.title("Case Coordination Workspace")
-    st.caption("A safe workflow for cross-agency coordination, with policy checks before every decision.")
+    st.title("CareMatch Safe — Referral Coordination Workspace")
+    st.caption(
+        "Synthetic HIFIS-inspired data covering organizations, clients, referrals, service encounters, consent, "
+        "data sharing agreements, and duplicate flags."
+    )
     st.markdown(
         """
         <style>
@@ -442,58 +466,62 @@ def main() -> None:
         st.warning("Dataset sanity checks found unexpected volume:")
         for warning in sanity_warnings:
             st.caption(f"- {warning}")
-    else:
-        st.success("Dataset sanity checks are within expected ranges.")
-
     st.caption("Decision Support Dashboard")
 
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric(
-        "Clients",
-        _format_metric_value(metrics["clients"]["value"]),
-        help="COUNT(*) from the clients table.",
+    clients = tables["clients"]
+    referrals = tables["referrals"]
+    encounters = tables["encounters"]
+    consent = tables["consent"]
+    # Match shared/app behavior: duplicate-pair KPI uses the dup_flags table.
+    # Our loader key is `duplicate_flags`, so we support both names.
+    dup_flags = tables.get("dup_flags", tables["duplicate_flags"])
+    chronic_rate = (
+        (clients["chronic_homeless_flag"] == True).mean() * 100  # noqa: E712
+        if "chronic_homeless_flag" in clients.columns
+        else 0.0
     )
-    k2.metric(
-        "Total referrals",
-        _format_metric_value(metrics["referrals_total"]["value"]),
-        help="COUNT(*) from the referrals table.",
-    )
-    k3.metric(
-        "Service encounters",
-        _format_metric_value(metrics["service_encounters"]["value"]),
-        help="COUNT(*) from the encounters table.",
-    )
-    k4.metric(
-        "Consent records",
-        _format_metric_value(metrics["consent_records"]["value"]),
-        help="COUNT(*) from the consent table.",
-    )
-    c1, c2, c3, c4 = st.columns(4)
-    c1.caption("current clients in coordination dataset")
-    c2.caption("all referral records in dataset")
-    c3.caption("logged care interactions")
-    c4.caption("consent and sharing records")
+    active_consent_pct = (consent["status"] == "active").mean() * 100 if "status" in consent.columns else 0.0
 
-    r1, r2, r3 = st.columns(3)
-    r1.metric(
-        "Consent issues",
-        _format_metric_value(metrics["consent_issues"]["value"]),
-        help="Consent exceptions computed from withdrawn, expired, invalid, missing purpose, or sharing-restricted consent rows.",
-    )
-    r2.metric(
-        "Pending referrals",
-        _format_metric_value(metrics["pending_referrals"]["value"]),
-        help="COUNT(*) where referrals.status is pending/submitted/in_review/queued.",
-    )
-    duplicate_tp = _format_metric_value(metrics["duplicate_flags_true_positive"]["value"])
-    duplicate_decoy = _format_metric_value(metrics["duplicate_flags_decoy_false_positive"]["value"])
-    r3.metric(
-        "Duplicate flags",
-        _format_metric_value(metrics["duplicate_flags_total"]["value"]),
-        f"true_positive: {duplicate_tp} | decoy_false_positive: {duplicate_decoy}",
-        delta_color="off",
-        help="COUNT(*) and label breakdown from duplicate_flags table.",
-    )
+    metric_cards = [
+        ("Clients", len(clients), "Unique rows in clients"),
+        ("Referrals", len(referrals), "Total referral transactions"),
+        ("Encounters", len(encounters), "Service encounters recorded"),
+        ("Chronic rate", f"{chronic_rate:.1f}%", "Share of clients flagged chronic"),
+        ("Duplicate pairs", len(dup_flags), f"Active consents: {active_consent_pct:.1f}%"),
+        (
+            "Consent issues",
+            metrics["consent_issues"]["value"],
+            "Consent exceptions computed from withdrawn, expired, invalid, missing purpose, or sharing-restricted consent rows.",
+        ),
+        (
+            "Pending referrals",
+            metrics["pending_referrals"]["value"],
+            "COUNT(*) where referrals.status is pending/submitted/in_review/queued.",
+        ),
+    ]
+    metrics_per_row = 4
+    for row_start in range(0, len(metric_cards), metrics_per_row):
+        row_cols = st.columns(metrics_per_row)
+        row_metrics = metric_cards[row_start : row_start + metrics_per_row]
+        for idx, col in enumerate(row_cols):
+            with col:
+                if idx < len(row_metrics):
+                    label, value, help_text = row_metrics[idx]
+                    _kpi(label, value, help_text=help_text)
+                else:
+                    st.empty()
+    st.markdown("---")
+    st.subheader("Next steps")
+    nav_a, nav_b, nav_c = st.columns(3)
+    with nav_a:
+        st.markdown("**Safe Client View** — client-level policy decision and restrictions.")
+        st.page_link("pages/1_safe_client_view.py", label="Open Safe Client View", icon="🔒")
+    with nav_b:
+        st.markdown("**Referral Matching** — eligible organizations and policy-safe routing.")
+        st.page_link("pages/2_referral_matching.py", label="Open Referral Matching", icon="🤝")
+    with nav_c:
+        st.markdown("**Ops Dashboard** — operational and policy risk visibility.")
+        st.page_link("pages/3_ops_dashboard.py", label="Open Ops Dashboard", icon="📊")
 
     st.markdown("---")
     st.markdown("### Today’s priorities")
