@@ -1,3 +1,23 @@
+"""CareMatch Safe Streamlit landing page for Track 1.
+
+Run with:
+    streamlit run app/streamlit_app.py
+
+This app follows the same shell pattern as ``shared/app/streamlit_app.py``
+but is specialized for Track 1 Inter-Org Referral & Care Coordination.
+
+
+**Privacy & safety statement (Track 1):** CareMatch Safe uses a policy-first workflow that checks consent state, sharing scope, and legal basis before any cross-agency information is shown, so expired/withdrawn/restricted consent cannot silently leak sensitive data. 
+
+For OCAP-protected clients, the app raises explicit warnings and routes users to manual OCAP/privacy review before broader coordination actions, with safe defaults that redact restricted fields and present plain-language next steps for caseworkers. 
+
+This reduces frontline cognitive load by turning complex governance rules into clear ready/limited/blocked decisions at the point of care coordination; food-delivery-specific constraints such as allergen and dietary routing are out of scope for this Track 1 solution.
+"""
+
+
+
+
+
 # BuildersVault Social Services Hackathon — Starter Kit
 
 **Event:** BuildersVault Social Services Hackathon
@@ -141,6 +161,8 @@ See `docs/submission-checklist.md` for the full list. At a minimum Saturday:
 - Public GitHub repo with your code
 - One-paragraph README explaining what you built and why
 - A statement on how your solution respects privacy and safety constraints for the track
+
+
 
 ---
 
